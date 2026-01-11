@@ -4,7 +4,7 @@ import plotly.express as px
 
 st.set_page_config(page_title="Forecast Production Trends", layout="wide")
 
-st.title("Alternative 1: Forecast Production Trends")
+st.title("Forecast Production Trends")
 st.caption("Prediction based data")
 
 @st.cache_data
@@ -94,5 +94,6 @@ st.plotly_chart(fig, width='stretch')
 
 with st.expander("Show sample rows"):
     st.dataframe(df_plot.head(50), use_container_width=True)
+
 
 
