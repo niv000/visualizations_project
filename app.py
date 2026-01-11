@@ -7,7 +7,6 @@ st.set_page_config(page_title="Alt 1 – Forecast Production Trends", layout="wi
 st.title("Alternative 1: Forecast Production Trends (Line Chart)")
 st.caption("Prediction-based data (forecasts), not observed events.")
 
-# ---- Load data ----
 @st.cache_data
 def load_data(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
@@ -27,7 +26,6 @@ def load_data(path: str) -> pd.DataFrame:
 
     return df
 
-# 🔧 If you keep the CSV inside your project folder, change to: "data/processed_wide.csv"
 DATA_PATH = "processed_wide.csv"
 
 try:
@@ -36,7 +34,6 @@ except Exception as e:
     st.error(f"Failed to load data from '{DATA_PATH}'.\n\n{e}")
     st.stop()
 
-# ---- Sidebar controls ----
 st.sidebar.header("Filters")
 
 commodities = sorted(df["commodity"].unique().tolist())
@@ -58,7 +55,6 @@ year_range = st.sidebar.slider("Year range", min_year, max_year, (min_year, max_
 
 show_avg = st.sidebar.checkbox("Show average (all countries)", value=True)
 
-# ---- Apply filters ----
 df_plot = df_c[
     (df_c["country"].isin(selected_countries)) &
     (df_c["year"].between(year_range[0], year_range[1]))
@@ -68,7 +64,6 @@ if df_plot.empty:
     st.warning("No data matches your filters. Try selecting more countries or widening the year range.")
     st.stop()
 
-# ---- Plot: Line chart with markers ----
 fig = px.line(
     df_plot,
     x="year",
@@ -83,7 +78,6 @@ fig = px.line(
     title=f"Predicted production over time – {selected_commodity}"
 )
 
-# Optional average line (across all countries for selected commodity)
 if show_avg:
     avg = (
         df_c[df_c["year"].between(year_range[0], year_range[1])]
@@ -98,6 +92,6 @@ if show_avg:
 fig.update_layout(height=600, legend_title_text="Country")
 st.plotly_chart(fig, width='stretch')
 
-# ---- Optional: quick preview ----
 with st.expander("Show sample rows"):
     st.dataframe(df_plot.head(50), use_container_width=True)
+
