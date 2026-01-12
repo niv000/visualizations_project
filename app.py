@@ -2,23 +2,17 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 
-# -----------------------------------------------------------------------------
-# Setup
-# -----------------------------------------------------------------------------
 st.set_page_config(page_title="Agriculture Forecast data", layout="wide")
-
 
 @st.cache_data
 def load_data(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
 
-    # Basic validation
     required = {"country", "commodity", "year", "production"}
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    # Clean types
     df = df.dropna(subset=["country", "commodity", "year", "production"]).copy()
     df["year"] = pd.to_numeric(df["year"], errors="coerce")
     df["production"] = pd.to_numeric(df["production"], errors="coerce")
@@ -27,23 +21,18 @@ def load_data(path: str) -> pd.DataFrame:
 
     return df
 
-
-# -----------------------------------------------------------------------------
-# Production Trends page
-# -----------------------------------------------------------------------------
 def show_production_page(df):
     st.title("Forecast Production Trends")
     st.caption("Prediction based data")
 
     st.sidebar.header("Filters")
 
-    # Commodity
     commodities = sorted(df["commodity"].unique().tolist())
     selected_commodity = st.sidebar.selectbox("Select commodity", commodities)
 
     df_c = df[df["commodity"] == selected_commodity].copy()
 
-    # Countries # TODO: logical defaults for countries and averages for every page in the dashboard
+    # TODO: logical defaults for countries and averages for every page in the dashboard
     countries = sorted(df_c["country"].unique().tolist())
     default_countries = countries[:6]
     selected_countries = st.sidebar.multiselect(
@@ -101,10 +90,6 @@ def show_production_page(df):
     with st.expander("Show sample rows"):
         st.dataframe(df_plot.head(50), use_container_width=True)
 
-
-# -----------------------------------------------------------------------------
-# Trade and Throughput market Comparison page
-# -----------------------------------------------------------------------------
 def show_trade_throughput_page(df):
     st.title("Compare Forecasts of Import, Export, Production, Consumption")
     st.caption("Comparison between countries and commodities")
@@ -134,7 +119,6 @@ def show_trade_throughput_page(df):
         key="comp_year_slider"
     )
 
-    # Country
     comp_countries_list = sorted(df["country"].unique().tolist())
     default_comp_countries = comp_countries_list[:3] if len(comp_countries_list) >= 3 else comp_countries_list
     selected_comp_countries = st.sidebar.multiselect(
@@ -153,7 +137,7 @@ def show_trade_throughput_page(df):
 
     # "Average" vs "specific commodity"
     if selected_comp_commodity == "Average of All":
-        chart_title = f"Average Distribution (All Commodities) in {selected_comp_year}"
+        chart_title = f"Average Distribution in {selected_comp_year}"
         if df_filtered.empty:
             df_comp = df_filtered
         else:
@@ -189,7 +173,7 @@ def show_trade_throughput_page(df):
 
 
 if __name__ == "__main__":
-    DATA_PATH = "processed_wide.csv"
+    DATA_PATH = "processed_data.csv"
 
     try:
         df = load_data(DATA_PATH)
@@ -205,3 +189,4 @@ if __name__ == "__main__":
         show_production_page(df)
     elif page_selection == "Trade and Throughput market Comparison":
         show_trade_throughput_page(df)
+
