@@ -197,7 +197,7 @@ def show_trade_throughput_page(df: pd.DataFrame):
 
 # Page 3: Yield Choropleth Map
 def show_yield_map_page(df: pd.DataFrame):
-    st.title("🌍 Global Yield – Interactive Choropleth Map")
+    st.title("Global Yield: Choropleth Map")
     st.caption("Uses processed_data.csv only")
 
     df_map = df.copy()
@@ -306,4 +306,5 @@ if __name__ == "__main__":
         show_trade_throughput_page(df)
     elif page_selection == "Yield Map":
         show_yield_map_page(df)
+
 
