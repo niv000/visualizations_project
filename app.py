@@ -30,8 +30,7 @@ def load_data(path: str) -> pd.DataFrame:
 # Page 1: Production Trends
 def show_production_page(df: pd.DataFrame):
     st.title("Forecast Production Trends")
-    st.caption("Presents forecasted production over time for selected commodities and countries.
-It enables comparison of temporal trends between countries and highlights overall patterns using an optional global average.")
+    st.caption("Presents forecasted production over time for selected commodities and countries.\n It enables comparison of temporal trends between countries and highlights overall patterns using an optional global average.")
 
     if "production" not in df.columns:
         st.error("Column 'production' is missing in processed_data.csv, so this page can't be displayed.")
@@ -104,8 +103,7 @@ It enables comparison of temporal trends between countries and highlights overal
 # Page 2: Trade / Throughput Comparison
 def show_trade_throughput_page(df: pd.DataFrame):
     st.title("Compare Forecasts of Import, Export, Production, Consumption")
-    st.caption("Compares key indicators &  productio. it's imports, exports, and consumption across countries for a selected year.
-It supports side by side comparison of market structure and relative contribution by commodity.")
+    st.caption("Compares key indicators &  productio. it's imports, exports, and consumption across countries for a selected year.\n It supports side by side comparison of market structure and relative contribution by commodity.")
 
     st.sidebar.markdown("---")
     st.sidebar.header("Comparison Filters")
@@ -200,8 +198,7 @@ It supports side by side comparison of market structure and relative contributio
 # Page 3: Yield Choropleth Map
 def show_yield_map_page(df: pd.DataFrame):
     st.title("Global Yield: Choropleth Map")
-    st.caption("Displays agricultural yield by country for a selected commodity and year.
-It provides a global spatial overview, allowing identification of geographic patterns and regional differences")
+    st.caption("Displays agricultural yield by country for a selected commodity and year.\n It provides a global spatial overview, allowing identification of geographic patterns and regional differences")
 
     df_map = df.copy()
 
