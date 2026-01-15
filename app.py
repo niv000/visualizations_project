@@ -56,19 +56,9 @@ def show_production_page(df: pd.DataFrame):
         st.warning("No rows for selected commodity.")
         return
 
-    # Countries filter (with requested defaults)
+    # Countries filter (DEFAULT: Israel only, but user can add/remove freely)
     countries = sorted(df_c["country"].unique().tolist())
-
-    preferred_defaults = [
-        "China (People’s Republic of)",
-        "European Union",
-        "Israel",
-        "Russia",
-        "United States",
-    ]
-    default_countries = [c for c in preferred_defaults if c in countries]
-    if not default_countries:
-        default_countries = countries[:5] if len(countries) >= 5 else countries
+    default_countries = ["Israel"] if "Israel" in countries else (countries[:1] if countries else [])
 
     selected_countries = st.sidebar.multiselect(
         "Countries",
@@ -88,7 +78,8 @@ def show_production_page(df: pd.DataFrame):
         key="prod_years",
     )
 
-    show_avg = st.sidebar.checkbox("Show average of all countries", value=True, key="prod_avg")
+    # Average checkbox (DEFAULT: off)
+    show_avg = st.sidebar.checkbox("Show average of all countries", value=False, key="prod_avg")
 
     # Data for selected countries + years
     df_plot = df_c[
@@ -136,6 +127,7 @@ def show_production_page(df: pd.DataFrame):
             fig.add_trace(tr)
 
     # ---- More scale marks on axes (ticks), plus grid ----
+
     # X axis: every year as a tick label
     tick_vals = list(range(year_range[0], year_range[1] + 1, 1))
     fig.update_xaxes(
@@ -146,35 +138,12 @@ def show_production_page(df: pd.DataFrame):
         gridcolor="rgba(0,0,0,0.08)",
     )
 
-    # Y axis: denser ticks based on data range (auto "nice" dtick)
-    import math
-
-    df_for_range = df_c[df_c["year"].between(year_range[0], year_range[1])]
-    y_min = float(df_for_range["production"].min())
-    y_max = float(df_for_range["production"].max())
-    span = max(y_max - y_min, 1.0)
-
-    # Aim for ~12 tick marks
-    raw_dtick = max(1.0, span / 12.0)
-
-    # Round to a "nice" number: 1, 2, 5, 10 * 10^k
-    pow10 = 10 ** int(math.floor(math.log10(raw_dtick)))
-    nice = raw_dtick / pow10
-    if nice <= 1:
-        nice = 1
-    elif nice <= 2:
-        nice = 2
-    elif nice <= 5:
-        nice = 5
-    else:
-        nice = 10
-    dtick = nice * pow10
-
+    # Y axis: LET PLOTLY CHOOSE TICKS (this fixes missing labels)
     fig.update_yaxes(
-        tickmode="linear",
-        dtick=dtick,
         showgrid=True,
         gridcolor="rgba(0,0,0,0.08)",
+        showticklabels=True,
+        tickformat=",",   # show numeric scale with commas; use "~s" for 1K/1M
     )
 
     fig.update_layout(height=600, legend_title_text="Country")
@@ -187,7 +156,10 @@ def show_production_page(df: pd.DataFrame):
 # Page 2: Trade / Throughput Comparison
 def show_trade_throughput_page(df: pd.DataFrame):
     st.title("Compare Forecasts of Import, Export, Production, Consumption")
-    st.caption("Compares key indicators &  productio. it's imports, exports, and consumption across countries for a selected year.\n It supports side by side comparison of market structure and relative contribution by commodity.")
+    st.caption(
+        "Compares key indicators &  productio. it's imports, exports, and consumption across countries for a selected year.\n"
+        "It supports side by side comparison of market structure and relative contribution by commodity."
+    )
 
     st.sidebar.markdown("---")
     st.sidebar.header("Comparison Filters")
@@ -229,7 +201,11 @@ def show_trade_throughput_page(df: pd.DataFrame):
     )
 
     comp_countries_list = sorted(df_metrics["country"].unique().tolist())
-    default_comp_countries = comp_countries_list[:3] if len(comp_countries_list) >= 3 else comp_countries_list
+
+    # Default countries: Israel, United States, Russia (if present in the data)
+    preferred_defaults = ["Israel", "United States", "Russia"]
+    default_comp_countries = [c for c in preferred_defaults if c in comp_countries_list]
+
     selected_comp_countries = st.sidebar.multiselect(
         "Select Countries",
         comp_countries_list,
@@ -282,15 +258,19 @@ def show_trade_throughput_page(df: pd.DataFrame):
 # Page 3: Yield Choropleth Map
 def show_yield_map_page(df: pd.DataFrame):
     st.title("Global Yield: Choropleth Map")
-    st.caption("Displays agricultural yield by country for a selected commodity and year.\n It provides a global spatial overview, allowing identification of geographic patterns and regional differences")
+    st.caption(
+        "Displays agricultural yield by country for a selected commodity and year.\n"
+        "It provides a global spatial overview, allowing identification of geographic patterns "
+        "and regional differences."
+    )
 
     df_map = df.copy()
 
+    # Determine yield column
     if "yield" in df_map.columns:
         df_map = df_map.dropna(subset=["yield"]).copy()
         value_col = "yield"
     else:
-        # Optional computed yield if possible
         if "production" in df_map.columns and "area" in df_map.columns:
             df_map = df_map.dropna(subset=["production", "area"]).copy()
             df_map = df_map[df_map["area"] != 0].copy()
@@ -314,7 +294,11 @@ def show_yield_map_page(df: pd.DataFrame):
     st.sidebar.header("Yield Map Filters")
 
     valid_commodities = sorted(df_map["commodity"].unique().tolist())
-    selected_commodity = st.sidebar.selectbox("Select Commodity", valid_commodities, key="yield_commodity")
+    selected_commodity = st.sidebar.selectbox(
+        "Select Commodity",
+        valid_commodities,
+        key="yield_commodity",
+    )
 
     df_commodity = df_map[df_map["commodity"] == selected_commodity].copy()
 
@@ -337,12 +321,17 @@ def show_yield_map_page(df: pd.DataFrame):
         st.warning("No rows for that year/commodity combination.")
         return
 
+    # ---- NEW: wider and robust color range ----
+    vmin = float(df_year[value_col].quantile(0.05))
+    vmax = float(df_year[value_col].quantile(0.95))
+
     fig = px.choropleth(
         df_year,
         locations="country",
         locationmode="country names",
         color=value_col,
-        color_continuous_scale="Oranges",
+        color_continuous_scale="Viridis",  # better contrast than Oranges
+        range_color=(vmin, vmax),
         hover_name="country",
         hover_data={
             "commodity": True,
@@ -355,7 +344,10 @@ def show_yield_map_page(df: pd.DataFrame):
 
     fig.update_layout(
         margin=dict(l=0, r=0, t=50, b=0),
-        coloraxis_colorbar=dict(title="Yield"),
+        coloraxis_colorbar=dict(
+            title="Yield",
+            tickformat=".2f",
+        ),
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -390,7 +382,6 @@ if __name__ == "__main__":
         show_trade_throughput_page(df)
     elif page_selection == "Yield Map":
         show_yield_map_page(df)
-
 
 
 
