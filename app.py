@@ -280,104 +280,91 @@ def show_trade_throughput_page(df: pd.DataFrame):
 
 # Page 3: Yield Choropleth Map
 def show_yield_map_page(df: pd.DataFrame):
-    st.title("Global Yield: Choropleth Map")
+    st.title("Global Yield: Relative Performance")
     st.caption(
-        "Displays agricultural yield by country for a selected commodity and year.\n"
-        "It provides a global spatial overview, allowing identification of geographic patterns "
-        "and regional differences."
+        "Displays agricultural yield relative to the global average for that year.\n"
+        "**Colors indicate deviation from the average:**\n"
+        "- **Brown**: Below Global Average\n"
+        "- **Light Yellow**: Near Global Average (1.0)\n"
+        "- **Blue**: Above Global Average"
     )
 
     df_map = df.copy()
 
-    # Determine yield column
+    # Determine Yield column
     if "yield" in df_map.columns:
-        df_map = df_map.dropna(subset=["yield"]).copy()
-        value_col = "yield"
-    else:
-        if "production" in df_map.columns and "area" in df_map.columns:
-            df_map = df_map.dropna(subset=["production", "area"]).copy()
-            df_map = df_map[df_map["area"] != 0].copy()
+        if df_map["yield"].notna().sum() == 0 and "production" in df_map.columns and "area" in df_map.columns:
             df_map["yield"] = df_map["production"] / df_map["area"]
-            value_col = "yield"
-        else:
-            st.error(
-                "To show the Yield Map using processed_data.csv, you need either:\n"
-                "- a 'yield' column, OR\n"
-                "- both 'production' and 'area' columns (to compute yield = production/area)."
-            )
-            return
-
-    # Keep only rows that can draw a map
-    df_map = df_map.dropna(subset=["country", "commodity", "year", value_col]).copy()
-    if df_map.empty:
-        st.warning("No valid rows found for the Yield Map.")
+    elif "production" in df_map.columns and "area" in df_map.columns:
+        df_map["yield"] = df_map["production"] / df_map["area"]
+    else:
+        st.error("Missing 'yield' column (or 'production' + 'area').")
         return
+
+    df_map = df_map.dropna(subset=["yield", "country", "commodity", "year"]).copy()
 
     st.sidebar.markdown("---")
     st.sidebar.header("Yield Map Filters")
 
     valid_commodities = sorted(df_map["commodity"].unique().tolist())
-    selected_commodity = st.sidebar.selectbox(
-        "Select Commodity",
-        valid_commodities,
-        key="yield_commodity",
-    )
+    selected_commodity = st.sidebar.selectbox("Select Commodity", valid_commodities, key="yield_commodity")
 
     df_commodity = df_map[df_map["commodity"] == selected_commodity].copy()
 
     valid_years = sorted(df_commodity["year"].unique().tolist())
-    if not valid_years:
-        st.error(f"No valid years with yield data for commodity: {selected_commodity}")
-        return
-
-    selected_year = st.sidebar.slider(
-        "Select Year",
-        min_value=int(min(valid_years)),
-        max_value=int(max(valid_years)),
-        value=int(min(valid_years)),
-        step=1,
-        key="yield_year",
-    )
+    selected_year = st.sidebar.slider("Select Year", int(min(valid_years)), int(max(valid_years)),
+                                      int(min(valid_years)), key="yield_year")
 
     df_year = df_commodity[df_commodity["year"] == selected_year].copy()
     if df_year.empty:
-        st.warning("No rows for that year/commodity combination.")
+        st.warning("No data for this selection.")
         return
 
-    # ---- NEW: wider and robust color range ----
-    vmin = float(df_year[value_col].quantile(0.05))
-    vmax = float(df_year[value_col].quantile(0.95))
+    # Calculate Relative Yield
+    global_avg_yield = df_year["yield"].mean()
+    df_year["relative_yield"] = df_year["yield"] / global_avg_yield
+
+    # Symmetric Color Scale
+    p05 = df_year["relative_yield"].quantile(0.05)
+    p95 = df_year["relative_yield"].quantile(0.95)
+
+    # This ensures 1.0 is always the center color (Light Yellow)
+    max_dev = max(abs(p95 - 1), abs(1 - p05))
+    max_dev = max(max_dev, 0.2)
+
+    c_min = 1 - max_dev
+    c_max = 1 + max_dev
 
     fig = px.choropleth(
         df_year,
         locations="country",
         locationmode="country names",
-        color=value_col,
-        color_continuous_scale="Viridis",  # better contrast than Oranges
-        range_color=(vmin, vmax),
+        color="relative_yield",
+        # Custom Scale: Brown -> Light Yellow -> Blue
+        color_continuous_scale=["#8B4513", "#FFFFE0", "#000080"],
+        range_color=[c_min, c_max],
         hover_name="country",
         hover_data={
             "commodity": True,
             "year": True,
-            value_col: ":.2f",
+            "relative_yield": ":.2f",
+            "yield": ":.2f"
         },
-        labels={value_col: "Yield"},
-        title=f"Yield by Country – {selected_commodity} ({selected_year})",
+        labels={"relative_yield": "Rel. Yield"},
+        title=f"Yield vs. Global Average – {selected_commodity} ({selected_year})<br><sub>Global Avg: {global_avg_yield:.2f} t/ha | 1.0 = Average</sub>",
     )
 
     fig.update_layout(
-        margin=dict(l=0, r=0, t=50, b=0),
+        margin=dict(l=0, r=0, t=80, b=0),
         coloraxis_colorbar=dict(
-            title="Yield",
+            title="Relative<br>Yield",
             tickformat=".2f",
-        ),
+        )
     )
-
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("Show sample rows"):
         st.dataframe(df_year.head(50), use_container_width=True)
-
 
 
 if __name__ == "__main__":
