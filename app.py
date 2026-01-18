@@ -27,6 +27,7 @@ def load_data(path: str) -> pd.DataFrame:
 
     return df
 
+
 # Page 1: Production Trends
 def show_production_page(df: pd.DataFrame):
     st.title("Forecast Production Trends")
@@ -47,13 +48,27 @@ def show_production_page(df: pd.DataFrame):
 
     st.sidebar.header("Filters")
 
-    # Commodity filter
     commodities = sorted(df_prod["commodity"].unique().tolist())
-    selected_commodity = st.sidebar.selectbox("Select commodity", commodities, key="prod_commodity")
 
-    df_c = df_prod[df_prod["commodity"] == selected_commodity].copy()
+    # Default to all commodities (Average of all)
+    default_comm = commodities if commodities else []
+
+    selected_commodities = st.sidebar.multiselect(
+        "Select commodities",
+        commodities,
+        default=default_comm,
+        key="prod_commodities"
+    )
+
+    if not selected_commodities:
+        st.warning("Please select at least one commodity.")
+        return
+
+    # Filter for all selected commodities
+    df_c = df_prod[df_prod["commodity"].isin(selected_commodities)].copy()
+
     if df_c.empty:
-        st.warning("No rows for selected commodity.")
+        st.warning("No rows for selected commodities.")
         return
 
     # Countries filter (DEFAULT: Israel only, but user can add/remove freely)
@@ -81,15 +96,26 @@ def show_production_page(df: pd.DataFrame):
     # Average checkbox (DEFAULT: off)
     show_avg = st.sidebar.checkbox("Show average of all countries", value=False, key="prod_avg")
 
-    # Data for selected countries + years
-    df_plot = df_c[
+    # Filter Data for selected countries + years
+    df_subset = df_c[
         (df_c["country"].isin(selected_countries)) &
         (df_c["year"].between(year_range[0], year_range[1]))
-    ].copy()
+        ].copy()
 
-    if df_plot.empty:
+    if df_subset.empty:
         st.warning("No data matches the filters. Try selecting more countries or widening the year range.")
         return
+
+    # Group by Country and Year, mean of production
+    df_plot = df_subset.groupby(["country", "year"], as_index=False)["production"].mean()
+
+    # Determine dynamic labels
+    if len(selected_commodities) > 1:
+        chart_title = "Average Predicted Production – Selected Commodities"
+        y_label = "Average Production"
+    else:
+        chart_title = f"Predicted Production – {selected_commodities[0]}"
+        y_label = "Predicted Production"
 
     # Main chart
     fig = px.line(
@@ -98,37 +124,34 @@ def show_production_page(df: pd.DataFrame):
         y="production",
         color="country",
         markers=True,
-        labels={"year": "Year", "production": "Predicted production", "country": "Country"},
-        title=f"Predicted production over time – {selected_commodity}",
+        labels={"year": "Year", "production": y_label, "country": "Country"},
+        title=chart_title,
     )
 
-    # Slightly bigger markers for readability (NOT "more points", just clearer points)
     fig.update_traces(marker=dict(size=8), selector=dict(mode="lines+markers"))
 
-    # Average line (highlighted)
+    # Average line
     if show_avg:
-        avg = (
-            df_c[df_c["year"].between(year_range[0], year_range[1])]
-            .groupby("year", as_index=False)["production"].mean()
-        )
+        # Take all data for the selected years (across all countries)
+        df_year_all = df_c[df_c["year"].between(year_range[0], year_range[1])]
+
+        # Average commodities per country first
+        country_avgs = df_year_all.groupby(["country", "year"], as_index=False)["production"].mean()
+
+        # Global average across countries
+        avg = country_avgs.groupby("year", as_index=False)["production"].mean()
 
         fig_avg = px.line(avg, x="year", y="production", markers=True)
         for tr in fig_avg.data:
             tr.name = "Average (all countries)"
             tr.showlegend = True
-
-            # Highlight style: black + thicker + bigger markers
             tr.line.color = "black"
             tr.line.width = 6
             tr.marker.size = 10
             tr.marker.color = "black"
-
-            # Add last so it's drawn on top
             fig.add_trace(tr)
 
-    # ---- More scale marks on axes (ticks), plus grid ----
-
-    # X axis: every year as a tick label
+    # X axis settings
     tick_vals = list(range(year_range[0], year_range[1] + 1, 1))
     fig.update_xaxes(
         tickmode="array",
@@ -138,18 +161,18 @@ def show_production_page(df: pd.DataFrame):
         gridcolor="rgba(0,0,0,0.08)",
     )
 
-    # Y axis: LET PLOTLY CHOOSE TICKS (this fixes missing labels)
+    # Y axis settings
     fig.update_yaxes(
         showgrid=True,
         gridcolor="rgba(0,0,0,0.08)",
         showticklabels=True,
-        tickformat=",",   # show numeric scale with commas; use "~s" for 1K/1M
+        tickformat=",",
     )
 
     fig.update_layout(height=600, legend_title_text="Country")
     st.plotly_chart(fig, use_container_width=True)
 
-    with st.expander("Show sample rows"):
+    with st.expander("Show sample rows (Aggregated)"):
         st.dataframe(df_plot.head(50), use_container_width=True)
 
 
