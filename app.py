@@ -3,6 +3,7 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import os
 
 st.set_page_config(page_title="Agriculture Forecast data", layout="wide")
 
@@ -28,6 +29,41 @@ def load_data(path: str) -> pd.DataFrame:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
     return df
+
+
+# Home Page
+def show_home_page():
+    st.title("OECD-FAO Agricultural Outlook Viewer")
+    st.markdown("---")
+
+    image_path = "homepagepic.jpg"
+
+    col_img, col_text = st.columns([1, 2], gap="large")
+
+    with col_img:
+        if os.path.exists(image_path):
+            st.image(image_path, caption="OECD-FAO Agricultural Outlook 2025-2034", use_container_width=True)
+        else:
+            st.warning(f"Image not found at '{image_path}'. Please ensure the file is uploaded.")
+
+    with col_text:
+        st.header("About This Dashboard", anchor=False)
+
+        st.markdown("""
+        This dashboard provides a comprehensive interface for exploring agricultural data projections.
+        Use the **Navigation sidebar** on the left to select a specific interactive visualization.
+        Each page provides filters for countries, commodities, and timeframes.
+        
+        ### Key Features
+        * **Production Analysis:** Observe production trends over the next decade.
+        * **Market Structure:** Compare imports, exports, and consumption metrics side-by-side across countries ans commodities and relative to global average. 
+        * **Geospatial Insights:** Visualize yield efficiency across countries and commodities.
+        
+        ### Data
+        The data visualized in this dashboard was taken from the OECD Data Explorer, the organisation's data warehouse, providing access to all OECD statistical data. 
+
+        *(Made by: Maya Gonen, Inbal Cohen, Niv Inbar, Michal Shuy)*
+        """)
 
 
 # Page 1: Production Trends
@@ -184,7 +220,7 @@ def show_trade_throughput_page(df: pd.DataFrame):
     st.caption(
         "Compares key indicators (Imports, Exports, Production, Consumption) across countries for a selected year.\n"
         "It supports side by side comparison of market structure and relative contribution by commodity.\n"
-        "Below, select a country to focus on, and see how it performs relative to the global average, sorted by category to your choice."
+        "Below, select a country to focus on, and see how it performs relative to the global average."
     )
 
     st.sidebar.markdown("---")
@@ -283,7 +319,7 @@ def show_trade_throughput_page(df: pd.DataFrame):
         "In the right panel, the vertical dashed line represents the Global Average (0%)."
     )
 
-    c1, c2 = st.columns([1, 1])
+    c1, c2, c3 = st.columns([1, 1, 1])
 
     with c1:
         selected_drill_country = st.selectbox(
@@ -303,27 +339,24 @@ def show_trade_throughput_page(df: pd.DataFrame):
 
         if not df_target.empty and not df_avgs.empty:
 
-            # Sort
             with c2:
-                sort_options = ["Total Volume"] + metrics
-                selected_sort_by = st.selectbox("Sort Commodities By", sort_options, index=0)
+                # Select which Metric to sort by
+                selected_sort_metric = st.selectbox("Sort By Metric", metrics,
+                                                    index=3)
 
-            # Create a sorting column based on user selection
-            if selected_sort_by == "Total Volume":
-                df_target["_sort_val"] = df_target[metrics].sum(axis=1)
-            else:
-                # Use the specific metric selected
-                df_target["_sort_val"] = df_target[selected_sort_by]
+            with c3:
+                # Select how to sort
+                sort_criteria = st.radio(
+                    "Sort Criteria",
+                    ["Deviation % (Right Graph)", "Country Value (Left Graph)", "Global Avg Magnitude"],
+                    index=0
+                )
 
-            # Sort commodities (Ascending=True)
-            sorted_commodities = df_target.sort_values("_sort_val", ascending=True)["commodity"].tolist()
-
+            # Data preparation for sorting
             df_target_melt = df_target.melt(id_vars=["commodity"], value_vars=metrics, var_name="Metric",
                                             value_name="Value")
             df_avgs_melt = df_avgs.melt(id_vars=["commodity"], value_vars=metrics, var_name="Metric",
                                         value_name="Avg_Value")
-
-            # Merge
             df_merged = pd.merge(df_target_melt, df_avgs_melt, on=["commodity", "Metric"], how="inner")
 
             # Calculate % Diff
@@ -331,6 +364,19 @@ def show_trade_throughput_page(df: pd.DataFrame):
                 lambda x: ((x["Value"] - x["Avg_Value"]) / x["Avg_Value"]) if x["Avg_Value"] > 0 else 0, axis=1
             )
             df_merged["Diff_Label"] = df_merged["Pct_Diff"].apply(lambda x: f"{x:+.0%}")
+
+            # Filter to the specific metric chosen for sorting
+            df_sorter = df_merged[df_merged["Metric"] == selected_sort_metric].copy()
+
+            if sort_criteria == "Deviation % (Right Graph)":
+                df_sorter = df_sorter.sort_values("Pct_Diff", ascending=True)
+            elif sort_criteria == "Country Value (Left Graph)":
+                df_sorter = df_sorter.sort_values("Value", ascending=True)
+            else:
+                df_sorter = df_sorter.sort_values("Avg_Value", ascending=True)
+
+            # Extract the sorted list of commodities
+            sorted_commodities = df_sorter["commodity"].tolist()
 
             fig_drill = make_subplots(
                 rows=1, cols=2,
@@ -378,7 +424,7 @@ def show_trade_throughput_page(df: pd.DataFrame):
                     customdata=subset[['Value', 'Avg_Value']]
                 ), row=1, col=2)
 
-            # Add Vertical Line at 0 (Average)
+            # Add Vertical line at 0 (Average)
             fig_drill.add_vline(
                 x=0, line_width=2, line_dash="dash", line_color="#555555",
                 annotation_text="Global Avg", annotation_position="top right",
@@ -390,7 +436,7 @@ def show_trade_throughput_page(df: pd.DataFrame):
                 title_text=f"Profile: {selected_drill_country} vs. Global Average ({selected_comp_year})",
                 barmode='group',
                 plot_bgcolor='white',
-                yaxis=dict(categoryorder='array', categoryarray=sorted_commodities),  # Applies the sort order
+                yaxis=dict(categoryorder='array', categoryarray=sorted_commodities),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
 
@@ -635,13 +681,16 @@ if __name__ == "__main__":
     page_selection = st.sidebar.radio(
         "Go to",
         [
+            "Home",
             "Production Trends",
             "Trade and Throughput market Comparison",
             "Yield Map",
         ],
     )
 
-    if page_selection == "Production Trends":
+    if page_selection == "Home":
+        show_home_page()
+    elif page_selection == "Production Trends":
         show_production_page(df)
     elif page_selection == "Trade and Throughput market Comparison":
         show_trade_throughput_page(df)
