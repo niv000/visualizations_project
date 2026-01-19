@@ -184,7 +184,7 @@ def show_trade_throughput_page(df: pd.DataFrame):
     st.caption(
         "Compares key indicators (Imports, Exports, Production, Consumption) across countries for a selected year.\n"
         "It supports side by side comparison of market structure and relative contribution by commodity.\n"
-        "Below, select a country to focus on, and see how it performs relative to the global average."
+        "Below, select a country to focus on, and see how it performs relative to the global average, sorted by category to your choice."
     )
 
     st.sidebar.markdown("---")
@@ -283,11 +283,14 @@ def show_trade_throughput_page(df: pd.DataFrame):
         "In the right panel, the vertical dashed line represents the Global Average (0%)."
     )
 
-    selected_drill_country = st.selectbox(
-        "Select Country to Analyze",
-        comp_countries_list,
-        index=comp_countries_list.index("Israel") if "Israel" in comp_countries_list else 0
-    )
+    c1, c2 = st.columns([1, 1])
+
+    with c1:
+        selected_drill_country = st.selectbox(
+            "Select Country to Analyze",
+            comp_countries_list,
+            index=comp_countries_list.index("Israel") if "Israel" in comp_countries_list else 0
+        )
 
     if selected_drill_country:
         df_drill_year = df_metrics[df_metrics["year"] == selected_comp_year].copy()
@@ -295,11 +298,26 @@ def show_trade_throughput_page(df: pd.DataFrame):
         # Selected country data
         df_target = df_drill_year[df_drill_year["country"] == selected_drill_country].copy()
 
-        # Global averages for that year
+        # Calculate global averages for that year
         df_avgs = df_drill_year.groupby("commodity", as_index=False)[metrics].mean()
 
         if not df_target.empty and not df_avgs.empty:
-            # Melt both for merging
+
+            # Sort
+            with c2:
+                sort_options = ["Total Volume"] + metrics
+                selected_sort_by = st.selectbox("Sort Commodities By", sort_options, index=0)
+
+            # Create a sorting column based on user selection
+            if selected_sort_by == "Total Volume":
+                df_target["_sort_val"] = df_target[metrics].sum(axis=1)
+            else:
+                # Use the specific metric selected
+                df_target["_sort_val"] = df_target[selected_sort_by]
+
+            # Sort commodities (Ascending=True)
+            sorted_commodities = df_target.sort_values("_sort_val", ascending=True)["commodity"].tolist()
+
             df_target_melt = df_target.melt(id_vars=["commodity"], value_vars=metrics, var_name="Metric",
                                             value_name="Value")
             df_avgs_melt = df_avgs.melt(id_vars=["commodity"], value_vars=metrics, var_name="Metric",
@@ -313,10 +331,6 @@ def show_trade_throughput_page(df: pd.DataFrame):
                 lambda x: ((x["Value"] - x["Avg_Value"]) / x["Avg_Value"]) if x["Avg_Value"] > 0 else 0, axis=1
             )
             df_merged["Diff_Label"] = df_merged["Pct_Diff"].apply(lambda x: f"{x:+.0%}")
-
-            # Sort commodities by total volume
-            df_target["_total_vol"] = df_target[metrics].sum(axis=1)
-            sorted_commodities = df_target.sort_values("_total_vol", ascending=True)["commodity"].tolist()
 
             fig_drill = make_subplots(
                 rows=1, cols=2,
@@ -376,7 +390,7 @@ def show_trade_throughput_page(df: pd.DataFrame):
                 title_text=f"Profile: {selected_drill_country} vs. Global Average ({selected_comp_year})",
                 barmode='group',
                 plot_bgcolor='white',
-                yaxis=dict(categoryorder='array', categoryarray=sorted_commodities),
+                yaxis=dict(categoryorder='array', categoryarray=sorted_commodities),  # Applies the sort order
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
 
