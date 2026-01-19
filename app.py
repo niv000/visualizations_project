@@ -278,7 +278,6 @@ def show_trade_throughput_page(df: pd.DataFrame):
         st.dataframe(df_comp, use_container_width=True)
 
 
-# Page 3: Yield Choropleth Map
 #Page 3: Yield Choropleth Map
 def show_yield_map_page(df: pd.DataFrame):
     st.title("Global Yield: Relative Performance")
@@ -515,6 +514,7 @@ if __name__ == "__main__":
         show_trade_throughput_page(df)
     elif page_selection == "Yield Map":
         show_yield_map_page(df)
+
 
 
 
