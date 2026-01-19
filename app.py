@@ -1,6 +1,8 @@
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 st.set_page_config(page_title="Agriculture Forecast data", layout="wide")
 
@@ -180,34 +182,32 @@ def show_production_page(df: pd.DataFrame):
 def show_trade_throughput_page(df: pd.DataFrame):
     st.title("Compare Forecasts of Import, Export, Production, Consumption")
     st.caption(
-        "Compares key indicators &  productio. it's imports, exports, and consumption across countries for a selected year.\n"
-        "It supports side by side comparison of market structure and relative contribution by commodity."
+        "Compares key indicators (Imports, Exports, Production, Consumption) across countries for a selected year.\n"
+        "It supports side by side comparison of market structure and relative contribution by commodity.\n"
+        "Below, select a country to focus on, and see how it performs relative to the global average."
     )
 
     st.sidebar.markdown("---")
     st.sidebar.header("Comparison Filters")
 
-    # Metrics that exist in this dataset
-    possible_metrics = ["exports", "imports", "consumption", "production"]
+    possible_metrics = ["production", "consumption", "imports", "exports"]
     metrics = [m for m in possible_metrics if m in df.columns]
 
     if not metrics:
-        st.error(
-            "None of the required metric columns exist in processed_data.csv.\n"
-            "Need at least one of: exports/imports/consumption/production."
-        )
+        st.error("None of the required metric columns exist in processed_data.csv.")
         return
 
     df_metrics = df.dropna(subset=metrics, how="all").copy()
     if df_metrics.empty:
-        st.warning("No valid metric rows found for comparison.")
+        st.warning("No valid metric rows found.")
         return
 
+    # Filters
     unique_commodities = sorted(df_metrics["commodity"].unique().tolist())
     comp_commodities = ["Average of All"] + unique_commodities
 
     selected_comp_commodity = st.sidebar.selectbox(
-        "Select Commodity",
+        "Select Commodity (Main Chart)",
         comp_commodities,
         index=0,
         key="comp_commodity_select",
@@ -224,58 +224,177 @@ def show_trade_throughput_page(df: pd.DataFrame):
     )
 
     comp_countries_list = sorted(df_metrics["country"].unique().tolist())
-
-    # Default countries: Israel, United States, Russia (if present in the data)
     preferred_defaults = ["Israel", "United States", "Russia"]
     default_comp_countries = [c for c in preferred_defaults if c in comp_countries_list]
 
     selected_comp_countries = st.sidebar.multiselect(
-        "Select Countries",
+        "Select Countries (Main Chart)",
         comp_countries_list,
         default=default_comp_countries,
         key="comp_country_select",
     )
 
+    # Main chart
+    st.subheader(f"1. Global Comparison: {selected_comp_commodity}")
+
     df_filtered = df_metrics[
         (df_metrics["year"] == selected_comp_year) &
         (df_metrics["country"].isin(selected_comp_countries))
-    ].copy()
+        ].copy()
 
     if selected_comp_commodity == "Average of All":
-        chart_title = f"Average Distribution in {selected_comp_year}"
-        if df_filtered.empty:
-            df_comp = df_filtered
-        else:
+        if not df_filtered.empty:
             df_comp = df_filtered.groupby("country", as_index=False)[metrics].mean()
+        else:
+            df_comp = df_filtered
+        chart_title = f"Average Metrics by Country ({selected_comp_year})"
     else:
         df_comp = df_filtered[df_filtered["commodity"] == selected_comp_commodity]
-        chart_title = f"Distribution of {selected_comp_commodity} in {selected_comp_year}"
+        chart_title = f"{selected_comp_commodity} Metrics by Country ({selected_comp_year})"
 
-    if df_comp.empty:
-        st.warning("No data available for the selected filters.")
-        return
+    if not df_comp.empty:
+        df_melted = df_comp.melt(
+            id_vars=["country"],
+            value_vars=metrics,
+            var_name="Metric",
+            value_name="Value",
+        )
 
-    df_melted = df_comp.melt(
-        id_vars=["country"],
-        value_vars=metrics,
-        var_name="Category",
-        value_name="Value",
+        fig_comp = px.bar(
+            df_melted,
+            x="country",
+            y="Value",
+            color="Metric",
+            barmode="group",
+            title=chart_title,
+            labels={"Value": "Quantity (1000 Tonnes)", "country": "Country"},
+            height=450,
+        )
+        st.plotly_chart(fig_comp, use_container_width=True)
+    else:
+        st.info("No data for the selected countries/year in the main chart.")
+
+    st.markdown("---")
+
+    # Relative performance
+    st.subheader("2. Country Deep-Dive: Deviation from Global Average")
+    st.caption(
+        "**Left Panel:** Absolute Quantity (Bar). **Right Panel:** Deviation from Global Average (Dot).\n"
+        "In the right panel, the vertical dashed line represents the Global Average (0%)."
     )
 
-    fig_comp = px.bar(
-        df_melted,
-        x="country",
-        y="Value",
-        color="Category",
-        barmode="group",
-        title=chart_title,
-        labels={"Value": "Quantity", "country": "Country"},
-        height=500,
+    selected_drill_country = st.selectbox(
+        "Select Country to Analyze",
+        comp_countries_list,
+        index=comp_countries_list.index("Israel") if "Israel" in comp_countries_list else 0
     )
-    st.plotly_chart(fig_comp, use_container_width=True)
 
-    with st.expander("View Data"):
-        st.dataframe(df_comp, use_container_width=True)
+    if selected_drill_country:
+        df_drill_year = df_metrics[df_metrics["year"] == selected_comp_year].copy()
+
+        # Selected country data
+        df_target = df_drill_year[df_drill_year["country"] == selected_drill_country].copy()
+
+        # Global averages for that year
+        df_avgs = df_drill_year.groupby("commodity", as_index=False)[metrics].mean()
+
+        if not df_target.empty and not df_avgs.empty:
+            # Melt both for merging
+            df_target_melt = df_target.melt(id_vars=["commodity"], value_vars=metrics, var_name="Metric",
+                                            value_name="Value")
+            df_avgs_melt = df_avgs.melt(id_vars=["commodity"], value_vars=metrics, var_name="Metric",
+                                        value_name="Avg_Value")
+
+            # Merge
+            df_merged = pd.merge(df_target_melt, df_avgs_melt, on=["commodity", "Metric"], how="inner")
+
+            # Calculate % Diff
+            df_merged["Pct_Diff"] = df_merged.apply(
+                lambda x: ((x["Value"] - x["Avg_Value"]) / x["Avg_Value"]) if x["Avg_Value"] > 0 else 0, axis=1
+            )
+            df_merged["Diff_Label"] = df_merged["Pct_Diff"].apply(lambda x: f"{x:+.0%}")
+
+            # Sort commodities by total volume
+            df_target["_total_vol"] = df_target[metrics].sum(axis=1)
+            sorted_commodities = df_target.sort_values("_total_vol", ascending=True)["commodity"].tolist()
+
+            fig_drill = make_subplots(
+                rows=1, cols=2,
+                shared_yaxes=True,
+                column_widths=[0.3, 0.7],
+                horizontal_spacing=0.03,
+                subplot_titles=("Absolute Quantity (Tonnes)", "Deviation from Global Avg")
+            )
+
+            colors = {
+                'production': '#1f77b4', 'consumption': '#89cff0',
+                'imports': '#d62728', 'exports': '#ff9896'
+            }
+
+            for metric in metrics:
+                subset = df_merged[df_merged["Metric"] == metric]
+
+                # Left: Absolute bar
+                fig_drill.add_trace(go.Bar(
+                    y=subset["commodity"],
+                    x=subset["Value"],
+                    orientation='h',
+                    name=metric,
+                    marker_color=colors.get(metric, 'gray'),
+                    legendgroup=metric,
+                ), row=1, col=1)
+
+                # Right: Normalized dot
+                fig_drill.add_trace(go.Scatter(
+                    y=subset["commodity"],
+                    x=subset["Pct_Diff"],
+                    mode='markers',
+                    text=subset["Diff_Label"],
+                    name=metric,
+                    marker=dict(size=9, color=colors.get(metric, 'gray'), line=dict(width=1, color='DarkSlateGrey')),
+                    legendgroup=metric,
+                    showlegend=False,
+                    hovertemplate=(
+                            "<b>%{y}</b><br>" +
+                            "Metric: " + metric + "<br>" +
+                            "Value: %{customdata[0]:.0f}<br>" +
+                            "Global Avg: %{customdata[1]:.0f}<br>" +
+                            "Deviation: %{text}<extra></extra>"
+                    ),
+                    customdata=subset[['Value', 'Avg_Value']]
+                ), row=1, col=2)
+
+            # Add Vertical Line at 0 (Average)
+            fig_drill.add_vline(
+                x=0, line_width=2, line_dash="dash", line_color="#555555",
+                annotation_text="Global Avg", annotation_position="top right",
+                row=1, col=2
+            )
+
+            fig_drill.update_layout(
+                height=max(600, len(sorted_commodities) * 25),
+                title_text=f"Profile: {selected_drill_country} vs. Global Average ({selected_comp_year})",
+                barmode='group',
+                plot_bgcolor='white',
+                yaxis=dict(categoryorder='array', categoryarray=sorted_commodities),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+
+            fig_drill.update_xaxes(showgrid=True, gridcolor='#eeeeee', row=1, col=1)
+            fig_drill.update_xaxes(
+                tickformat=".0%",
+                showgrid=True, gridcolor='#eeeeee', zeroline=False,
+                row=1, col=2
+            )
+            fig_drill.update_yaxes(showgrid=True, gridcolor='#eeeeee', tickmode='linear')
+
+            st.plotly_chart(fig_drill, use_container_width=True)
+
+            with st.expander(f"View Raw Data for {selected_drill_country}"):
+                st.dataframe(df_merged)
+
+        else:
+            st.warning(f"No data available for {selected_drill_country} in {selected_comp_year}.")
 
 
 # Page 3: Yield Choropleth Map
