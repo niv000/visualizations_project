@@ -7,7 +7,10 @@ import os
 
 st.set_page_config(page_title="Agriculture Forecast data", layout="wide")
 
+
+# -----------------------
 # Load data
+# -----------------------
 @st.cache_data
 def load_data(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
@@ -31,13 +34,14 @@ def load_data(path: str) -> pd.DataFrame:
     return df
 
 
+# -----------------------
 # Home Page
+# -----------------------
 def show_home_page():
-    st.title("OECD-FAO Agricultural Outlook Viewer")
+    st.title("🏡 OECD-FAO Agricultural Outlook Viewer")
     st.markdown("---")
 
     image_path = "homepagepic.jpg"
-
     col_img, col_text = st.columns([1, 2], gap="large")
 
     with col_img:
@@ -48,27 +52,28 @@ def show_home_page():
 
     with col_text:
         st.header("About This Dashboard", anchor=False)
-
         st.markdown("""
         This dashboard provides a comprehensive interface for exploring agricultural data projections.
         Use the **Navigation sidebar** on the left to select a specific interactive visualization.
         Each page provides filters for countries, commodities, and timeframes.
-        
+
         ### Key Features
         * **Production Analysis:** Observe production trends over the next decade.
-        * **Market Structure:** Compare imports, exports, and consumption metrics side-by-side across countries ans commodities and relative to global average. 
+        * **Market Structure:** Compare imports, exports, and consumption metrics side-by-side across countries and commodities and relative to global average.
         * **Geospatial Insights:** Visualize yield efficiency across countries and commodities.
-        
+
         ### Data
-        The data visualized in this dashboard was taken from the OECD Data Explorer, the organisation's data warehouse, providing access to all OECD statistical data. 
+        The data visualized in this dashboard was taken from the OECD Data Explorer, the organisation's data warehouse, providing access to all OECD statistical data.
 
         *(Made by: Maya Gonen, Inbal Cohen, Niv Inbar, Michal Shuy)*
         """)
 
 
+# -----------------------
 # Page 1: Production Trends
+# -----------------------
 def show_production_page(df: pd.DataFrame):
-    st.title("Forecast Production Trends")
+    st.title("🏭 Forecast Production Trends")
     st.caption(
         "Presents forecasted production over time for selected commodities and countries.\n"
         "It enables comparison of temporal trends between countries and highlights overall patterns "
@@ -84,11 +89,9 @@ def show_production_page(df: pd.DataFrame):
         st.warning("No valid production rows found.")
         return
 
-    st.sidebar.header("Filters")
+    st.sidebar.header("Filters 🧰")
 
     commodities = sorted(df_prod["commodity"].unique().tolist())
-
-    # Default to all commodities (Average of all)
     default_comm = commodities if commodities else []
 
     selected_commodities = st.sidebar.multiselect(
@@ -102,14 +105,11 @@ def show_production_page(df: pd.DataFrame):
         st.warning("Please select at least one commodity.")
         return
 
-    # Filter for all selected commodities
     df_c = df_prod[df_prod["commodity"].isin(selected_commodities)].copy()
-
     if df_c.empty:
         st.warning("No rows for selected commodities.")
         return
 
-    # Countries filter (DEFAULT: Israel only, but user can add/remove freely)
     countries = sorted(df_c["country"].unique().tolist())
     default_countries = ["Israel"] if "Israel" in countries else (countries[:1] if countries else [])
 
@@ -120,7 +120,6 @@ def show_production_page(df: pd.DataFrame):
         key="prod_countries",
     )
 
-    # Year range filter
     min_year = int(df_c["year"].min())
     max_year = int(df_c["year"].max())
     year_range = st.sidebar.slider(
@@ -131,31 +130,26 @@ def show_production_page(df: pd.DataFrame):
         key="prod_years",
     )
 
-    # Average checkbox (DEFAULT: off)
     show_avg = st.sidebar.checkbox("Show average of all countries", value=False, key="prod_avg")
 
-    # Filter Data for selected countries + years
     df_subset = df_c[
         (df_c["country"].isin(selected_countries)) &
         (df_c["year"].between(year_range[0], year_range[1]))
-        ].copy()
+    ].copy()
 
     if df_subset.empty:
         st.warning("No data matches the filters. Try selecting more countries or widening the year range.")
         return
 
-    # Group by Country and Year, mean of production
     df_plot = df_subset.groupby(["country", "year"], as_index=False)["production"].mean()
 
-    # Determine dynamic labels
     if len(selected_commodities) > 1:
-        chart_title = "Average Predicted Production – Selected Commodities"
+        chart_title = "📈 Average Predicted Production – Selected Commodities"
         y_label = "Average Production"
     else:
-        chart_title = f"Predicted Production – {selected_commodities[0]}"
+        chart_title = f"📈 Predicted Production – {selected_commodities[0]}"
         y_label = "Predicted Production"
 
-    # Main chart
     fig = px.line(
         df_plot,
         x="year",
@@ -168,15 +162,9 @@ def show_production_page(df: pd.DataFrame):
 
     fig.update_traces(marker=dict(size=8), selector=dict(mode="lines+markers"))
 
-    # Average line
     if show_avg:
-        # Take all data for the selected years (across all countries)
         df_year_all = df_c[df_c["year"].between(year_range[0], year_range[1])]
-
-        # Average commodities per country first
         country_avgs = df_year_all.groupby(["country", "year"], as_index=False)["production"].mean()
-
-        # Global average across countries
         avg = country_avgs.groupby("year", as_index=False)["production"].mean()
 
         fig_avg = px.line(avg, x="year", y="production", markers=True)
@@ -189,7 +177,6 @@ def show_production_page(df: pd.DataFrame):
             tr.marker.color = "black"
             fig.add_trace(tr)
 
-    # X axis settings
     tick_vals = list(range(year_range[0], year_range[1] + 1, 1))
     fig.update_xaxes(
         tickmode="array",
@@ -199,7 +186,6 @@ def show_production_page(df: pd.DataFrame):
         gridcolor="rgba(0,0,0,0.08)",
     )
 
-    # Y axis settings
     fig.update_yaxes(
         showgrid=True,
         gridcolor="rgba(0,0,0,0.08)",
@@ -210,13 +196,15 @@ def show_production_page(df: pd.DataFrame):
     fig.update_layout(height=600, legend_title_text="Country")
     st.plotly_chart(fig, use_container_width=True)
 
-    with st.expander("Show sample rows (Aggregated)"):
+    with st.expander("🔎 Show sample rows (Aggregated)"):
         st.dataframe(df_plot.head(50), use_container_width=True)
 
 
+# -----------------------
 # Page 2: Trade / Throughput Comparison
+# -----------------------
 def show_trade_throughput_page(df: pd.DataFrame):
-    st.title("Compare Forecasts of Import, Export, Production, Consumption")
+    st.title("👩🏻‍🌾 Trade & Throughput Market Comparison")
     st.caption(
         "Compares key indicators (Imports, Exports, Production, Consumption) across countries for a selected year.\n"
         "It supports side by side comparison of market structure and relative contribution by commodity.\n"
@@ -224,7 +212,7 @@ def show_trade_throughput_page(df: pd.DataFrame):
     )
 
     st.sidebar.markdown("---")
-    st.sidebar.header("Comparison Filters")
+    st.sidebar.header("Comparison Filters 🧰")
 
     possible_metrics = ["production", "consumption", "imports", "exports"]
     metrics = [m for m in possible_metrics if m in df.columns]
@@ -238,7 +226,6 @@ def show_trade_throughput_page(df: pd.DataFrame):
         st.warning("No valid metric rows found.")
         return
 
-    # Filters
     unique_commodities = sorted(df_metrics["commodity"].unique().tolist())
     comp_commodities = ["Average of All"] + unique_commodities
 
@@ -270,19 +257,15 @@ def show_trade_throughput_page(df: pd.DataFrame):
         key="comp_country_select",
     )
 
-    # Main chart
-    st.subheader(f"1. Global Comparison: {selected_comp_commodity}")
+    st.subheader(f"🌍 1. Global Comparison: {selected_comp_commodity}")
 
     df_filtered = df_metrics[
         (df_metrics["year"] == selected_comp_year) &
         (df_metrics["country"].isin(selected_comp_countries))
-        ].copy()
+    ].copy()
 
     if selected_comp_commodity == "Average of All":
-        if not df_filtered.empty:
-            df_comp = df_filtered.groupby("country", as_index=False)[metrics].mean()
-        else:
-            df_comp = df_filtered
+        df_comp = df_filtered.groupby("country", as_index=False)[metrics].mean() if not df_filtered.empty else df_filtered
         chart_title = f"Average Metrics by Country ({selected_comp_year})"
     else:
         df_comp = df_filtered[df_filtered["commodity"] == selected_comp_commodity]
@@ -312,8 +295,7 @@ def show_trade_throughput_page(df: pd.DataFrame):
 
     st.markdown("---")
 
-    # Relative performance
-    st.subheader("2. Country Deep-Dive: Deviation from Global Average")
+    st.subheader("📌 2. Country Deep-Dive: Deviation from Global Average")
     st.caption(
         "**Left Panel:** Absolute Quantity (Bar). **Right Panel:** Deviation from Global Average (Dot).\n"
         "In the right panel, the vertical dashed line represents the Global Average (0%)."
@@ -330,44 +312,31 @@ def show_trade_throughput_page(df: pd.DataFrame):
 
     if selected_drill_country:
         df_drill_year = df_metrics[df_metrics["year"] == selected_comp_year].copy()
-
-        # Selected country data
         df_target = df_drill_year[df_drill_year["country"] == selected_drill_country].copy()
-
-        # Calculate global averages for that year
         df_avgs = df_drill_year.groupby("commodity", as_index=False)[metrics].mean()
 
         if not df_target.empty and not df_avgs.empty:
-
             with c2:
-                # Select which Metric to sort by
-                selected_sort_metric = st.selectbox("Sort By Metric", metrics,
-                                                    index=3)
+                selected_sort_metric = st.selectbox("Sort By Metric", metrics, index=min(3, len(metrics) - 1))
 
             with c3:
-                # Select how to sort
                 sort_criteria = st.radio(
                     "Sort Criteria",
                     ["Deviation % (Right Graph)", "Country Value (Left Graph)", "Global Avg Magnitude"],
                     index=0
                 )
 
-            # Data preparation for sorting
-            df_target_melt = df_target.melt(id_vars=["commodity"], value_vars=metrics, var_name="Metric",
-                                            value_name="Value")
-            df_avgs_melt = df_avgs.melt(id_vars=["commodity"], value_vars=metrics, var_name="Metric",
-                                        value_name="Avg_Value")
+            df_target_melt = df_target.melt(id_vars=["commodity"], value_vars=metrics, var_name="Metric", value_name="Value")
+            df_avgs_melt = df_avgs.melt(id_vars=["commodity"], value_vars=metrics, var_name="Metric", value_name="Avg_Value")
             df_merged = pd.merge(df_target_melt, df_avgs_melt, on=["commodity", "Metric"], how="inner")
 
-            # Calculate % Diff
             df_merged["Pct_Diff"] = df_merged.apply(
-                lambda x: ((x["Value"] - x["Avg_Value"]) / x["Avg_Value"]) if x["Avg_Value"] > 0 else 0, axis=1
+                lambda x: ((x["Value"] - x["Avg_Value"]) / x["Avg_Value"]) if x["Avg_Value"] and x["Avg_Value"] > 0 else 0,
+                axis=1
             )
             df_merged["Diff_Label"] = df_merged["Pct_Diff"].apply(lambda x: f"{x:+.0%}")
 
-            # Filter to the specific metric chosen for sorting
             df_sorter = df_merged[df_merged["Metric"] == selected_sort_metric].copy()
-
             if sort_criteria == "Deviation % (Right Graph)":
                 df_sorter = df_sorter.sort_values("Pct_Diff", ascending=True)
             elif sort_criteria == "Country Value (Left Graph)":
@@ -375,7 +344,6 @@ def show_trade_throughput_page(df: pd.DataFrame):
             else:
                 df_sorter = df_sorter.sort_values("Avg_Value", ascending=True)
 
-            # Extract the sorted list of commodities
             sorted_commodities = df_sorter["commodity"].tolist()
 
             fig_drill = make_subplots(
@@ -387,44 +355,43 @@ def show_trade_throughput_page(df: pd.DataFrame):
             )
 
             colors = {
-                'production': '#1f77b4', 'consumption': '#89cff0',
-                'imports': '#d62728', 'exports': '#ff9896'
+                "production": "#1f77b4",
+                "consumption": "#89cff0",
+                "imports": "#d62728",
+                "exports": "#ff9896",
             }
 
             for metric in metrics:
                 subset = df_merged[df_merged["Metric"] == metric]
 
-                # Left: Absolute bar
                 fig_drill.add_trace(go.Bar(
                     y=subset["commodity"],
                     x=subset["Value"],
-                    orientation='h',
+                    orientation="h",
                     name=metric,
-                    marker_color=colors.get(metric, 'gray'),
+                    marker_color=colors.get(metric, "gray"),
                     legendgroup=metric,
                 ), row=1, col=1)
 
-                # Right: Normalized dot
                 fig_drill.add_trace(go.Scatter(
                     y=subset["commodity"],
                     x=subset["Pct_Diff"],
-                    mode='markers',
+                    mode="markers",
                     text=subset["Diff_Label"],
                     name=metric,
-                    marker=dict(size=9, color=colors.get(metric, 'gray'), line=dict(width=1, color='DarkSlateGrey')),
+                    marker=dict(size=9, color=colors.get(metric, "gray"), line=dict(width=1, color="DarkSlateGrey")),
                     legendgroup=metric,
                     showlegend=False,
                     hovertemplate=(
-                            "<b>%{y}</b><br>" +
-                            "Metric: " + metric + "<br>" +
-                            "Value: %{customdata[0]:.0f}<br>" +
-                            "Global Avg: %{customdata[1]:.0f}<br>" +
-                            "Deviation: %{text}<extra></extra>"
+                        "<b>%{y}</b><br>"
+                        "Metric: " + metric + "<br>"
+                        "Value: %{customdata[0]:.0f}<br>"
+                        "Global Avg: %{customdata[1]:.0f}<br>"
+                        "Deviation: %{text}<extra></extra>"
                     ),
-                    customdata=subset[['Value', 'Avg_Value']]
+                    customdata=subset[["Value", "Avg_Value"]]
                 ), row=1, col=2)
 
-            # Add Vertical line at 0 (Average)
             fig_drill.add_vline(
                 x=0, line_width=2, line_dash="dash", line_color="#555555",
                 annotation_text="Global Avg", annotation_position="top right",
@@ -433,42 +400,41 @@ def show_trade_throughput_page(df: pd.DataFrame):
 
             fig_drill.update_layout(
                 height=max(600, len(sorted_commodities) * 25),
-                title_text=f"Profile: {selected_drill_country} vs. Global Average ({selected_comp_year})",
-                barmode='group',
-                plot_bgcolor='white',
-                yaxis=dict(categoryorder='array', categoryarray=sorted_commodities),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                title_text=f"📊 {selected_drill_country} vs. Global Average ({selected_comp_year})",
+                barmode="group",
+                plot_bgcolor="white",
+                yaxis=dict(categoryorder="array", categoryarray=sorted_commodities),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             )
 
-            fig_drill.update_xaxes(showgrid=True, gridcolor='#eeeeee', row=1, col=1)
-            fig_drill.update_xaxes(
-                tickformat=".0%",
-                showgrid=True, gridcolor='#eeeeee', zeroline=False,
-                row=1, col=2
-            )
-            fig_drill.update_yaxes(showgrid=True, gridcolor='#eeeeee', tickmode='linear')
+            fig_drill.update_xaxes(showgrid=True, gridcolor="#eeeeee", row=1, col=1)
+            fig_drill.update_xaxes(tickformat=".0%", showgrid=True, gridcolor="#eeeeee", zeroline=False, row=1, col=2)
+            fig_drill.update_yaxes(showgrid=True, gridcolor="#eeeeee")
 
             st.plotly_chart(fig_drill, use_container_width=True)
 
-            with st.expander(f"View Raw Data for {selected_drill_country}"):
+            with st.expander(f"🔎 View Raw Data for {selected_drill_country}"):
                 st.dataframe(df_merged)
 
         else:
             st.warning(f"No data available for {selected_drill_country} in {selected_comp_year}.")
 
 
-#Page 3: Yield Choropleth Map
+# -----------------------
+# Page 3: Yield Choropleth Map
+# -----------------------
 def show_yield_map_page(df: pd.DataFrame):
-    st.title("Global Yield: Relative Performance")
-    st.caption("Displays agricultural yield by country for a selected commodity and year.\n It provides a global spatial overview, allowing identification of geographic patterns and regional differences")
+    st.title("🗺️ Global Yield: Relative Performance")
+    st.caption(
+        "Displays agricultural yield by country for a selected commodity and year.\n"
+        "It provides a global spatial overview, allowing identification of geographic patterns and regional differences."
+    )
 
-    # Session state
     if "yield_map_countries" not in st.session_state:
         st.session_state.yield_map_countries = []
 
     df_map = df.copy()
 
-    # Determine Yield column
     if "yield" in df_map.columns:
         if df_map["yield"].notna().sum() == 0 and "production" in df_map.columns and "area" in df_map.columns:
             df_map["yield"] = df_map["production"] / df_map["area"]
@@ -484,9 +450,8 @@ def show_yield_map_page(df: pd.DataFrame):
 
     df_map = df_map.dropna(subset=["yield", "country", "commodity", "year"]).copy()
 
-    # Sidebar filters
     st.sidebar.markdown("---")
-    st.sidebar.header("Yield Map Filters")
+    st.sidebar.header("Yield Map Filters 🧰")
 
     selected_commodity = st.sidebar.selectbox(
         "Select Commodity",
@@ -509,7 +474,6 @@ def show_yield_map_page(df: pd.DataFrame):
         st.warning("No data for this selection.")
         return
 
-    # Relative yield
     global_avg = df_year["yield"].mean()
     df_year["relative_yield"] = df_year["yield"] / global_avg
 
@@ -527,8 +491,8 @@ def show_yield_map_page(df: pd.DataFrame):
         hover_name="country",
         hover_data={"yield": ":.2f", "production": ":.2f"},
         title=(
-            f"Yield vs. Global Average – {selected_commodity} ({selected_year})"
-            f"<br><sub>Global Avg: {global_avg:.2f} t/m^2 | 1.0 = Average</sub>"
+            f"🌎 Yield vs. Global Average – {selected_commodity} ({selected_year})"
+            f"<br><sub>Global Avg: {global_avg:.2f} (yield units) | 1.0 = Average</sub>"
         ),
     )
 
@@ -544,7 +508,6 @@ def show_yield_map_page(df: pd.DataFrame):
         selection_mode="points",
     )
 
-    # Extract selected countries (max 2)
     points = []
     if isinstance(selection, dict):
         points = selection.get("points", []) or selection.get("selection", {}).get("points", [])
@@ -566,18 +529,16 @@ def show_yield_map_page(df: pd.DataFrame):
                 merged.append(c)
         st.session_state.yield_map_countries = merged[-2:]
 
-    # Controls
     c1, c2 = st.columns([1, 5])
     with c1:
-        if st.button("Clear selection"):
+        if st.button("🧹 Clear selection"):
             st.session_state.yield_map_countries = []
     with c2:
         st.write(
-            "**Selected (up to 2):** "
+            "✅ **Selected (up to 2):** "
             + (", ".join(st.session_state.yield_map_countries) if st.session_state.yield_map_countries else "None")
         )
 
-    # Bar charts
     if st.session_state.yield_map_countries:
         df_sel = df_year[df_year["country"].isin(st.session_state.yield_map_countries)]
 
@@ -590,21 +551,13 @@ def show_yield_map_page(df: pd.DataFrame):
         df_agg["__o"] = df_agg["country"].map(order)
         df_agg = df_agg.sort_values("__o")
 
-        st.subheader(f"Country Comparison — {selected_commodity} ({selected_year})")
+        st.subheader(f"📊 Country Comparison — {selected_commodity} ({selected_year})")
 
         col1, col2 = st.columns(2)
 
-        # Production chart
         with col1:
             max_prod = df_agg["production"].max()
-
-            fig_p = px.bar(
-                df_agg,
-                x="country",
-                y="production",
-                text="production",
-                title="Production",
-            )
+            fig_p = px.bar(df_agg, x="country", y="production", text="production", title="🏭 Production")
             fig_p.update_traces(
                 marker_color="#2E8B57",
                 texttemplate="%{text:.2f}",
@@ -627,17 +580,9 @@ def show_yield_map_page(df: pd.DataFrame):
             )
             st.plotly_chart(fig_p, use_container_width=True)
 
-        # Yield chart
         with col2:
             max_yield = df_agg["yield_val"].max()
-
-            fig_y = px.bar(
-                df_agg,
-                x="country",
-                y="yield_val",
-                text="yield_val",
-                title="Yield (t/m^2)",
-            )
+            fig_y = px.bar(df_agg, x="country", y="yield_val", text="yield_val", title="🌾 Yield")
             fig_y.update_traces(
                 marker_color="#D2691E",
                 texttemplate="%{text:.2f}",
@@ -648,7 +593,7 @@ def show_yield_map_page(df: pd.DataFrame):
                 height=420,
                 yaxis=dict(
                     range=[0, max_yield * 1.20],
-                    title="Yield (t/m^2)",
+                    title="Yield",
                     title_font=dict(size=18, color="black"),
                     tickfont=dict(size=14, color="black"),
                 ),
@@ -660,14 +605,17 @@ def show_yield_map_page(df: pd.DataFrame):
             )
             st.plotly_chart(fig_y, use_container_width=True)
 
-        st.caption("**t/m^2** = tons per hectare")
-
+        st.caption("**Yield unit note:** make sure the unit label matches your dataset documentation (e.g., t/ha).")
     else:
-        st.info("Select up to 2 countries on the map to compare their Production and Yield.")
+        st.info("👆 Select up to 2 countries on the map to compare their Production and Yield.")
 
-    with st.expander("Show sample rows"):
+    with st.expander("🔎 Show sample rows"):
         st.dataframe(df_year.head(50), use_container_width=True)
 
+
+# -----------------------
+# Main
+# -----------------------
 if __name__ == "__main__":
     DATA_PATH = "processed_data.csv"
 
@@ -677,27 +625,24 @@ if __name__ == "__main__":
         st.error(f"Failed to load data from '{DATA_PATH}'.\n\n{e}")
         st.stop()
 
-    st.sidebar.title("Navigation")
-    page_selection = st.sidebar.radio(
-        "Go to",
-        [
-            "Home",
-            "Production Trends",
-            "Trade and Throughput market Comparison",
-            "Yield Map",
-        ],
-    )
+    st.sidebar.title("Navigation 📍")
 
-    if page_selection == "Home":
+    # ✅ Keep emojis in UI labels, but use clean internal keys
+    pages = {
+        "🏡 Home": "home",
+        "🏭 Production Trends": "production",
+        "👩🏻‍🌾 Trade & Throughput Comparison": "trade",
+        "🗺️ Yield Map": "yield",
+    }
+
+    selected_label = st.sidebar.radio("Go to", list(pages.keys()))
+    page_selection = pages[selected_label]
+
+    if page_selection == "home":
         show_home_page()
-    elif page_selection == "Production Trends":
+    elif page_selection == "production":
         show_production_page(df)
-    elif page_selection == "Trade and Throughput market Comparison":
+    elif page_selection == "trade":
         show_trade_throughput_page(df)
-    elif page_selection == "Yield Map":
+    elif page_selection == "yield":
         show_yield_map_page(df)
-
-
-
-
-
